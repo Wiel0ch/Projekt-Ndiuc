@@ -36,7 +36,6 @@ class Ramka:
         return Ramka(seq_num=seq_num, dane=dane_bajty, crc=crc)
 
     def czy_poprawna(self) -> bool:
-        """Sprawdza poprawność CRC tej ramki."""
         return KoderCRC16.weryfikuj(self.dane, self.crc)
 
     # debugowanie
