@@ -8,27 +8,23 @@ ROZMIAR_NAGLOWKA = struct.calcsize(NAGLOWEK_FORMAT)
 
 
 class Ramka:
-    """Definicja ramki transmisyjnej (kontener na dane)."""
-
     def __init__(self, seq_num: int, dane: bytes, crc: int = None):
-        self.seq_num = seq_num & 0xFF  # Upewnij się, że mieści się w 1 bajcie
+        self.seq_num = seq_num & 0xFF
         self.dane = dane
 
         if crc is None:
-            # Oblicz CRC, jeśli tworzymy nową ramkę
+            #CRC dla nowej ramki
             self.crc = KoderCRC16.oblicz(self.dane)
         else:
-            # Użyj podanego CRC (przy rozpakowywaniu)
+            # Użyj podanego CRC (rozpakowanie)
             self.crc = crc
 
     def pakuj(self) -> bytes:
-        """Konwertuje obiekt Ramka na ciąg bajtów do wysłania."""
         naglowek = struct.pack(NAGLOWEK_FORMAT, self.seq_num, self.crc)
         return naglowek + self.dane
 
     @staticmethod
     def rozpakuj(ramka_bajty: bytes):
-        """Konwertuje ciąg bajtów z powrotem na obiekt Ramka."""
         if len(ramka_bajty) < ROZMIAR_NAGLOWKA:
             raise ValueError("Ramka zbyt krótka (uszkodzony nagłówek).")
 
@@ -43,8 +39,8 @@ class Ramka:
         """Sprawdza poprawność CRC tej ramki."""
         return KoderCRC16.weryfikuj(self.dane, self.crc)
 
+    # debugowanie
     def __repr__(self):
-        """Ładna reprezentacja do debugowania."""
         dane_str = self.dane.decode('utf-8', errors='ignore')
         if len(dane_str) > 20:
             dane_str = dane_str[:20] + "..."
