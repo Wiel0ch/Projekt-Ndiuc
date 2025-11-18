@@ -30,7 +30,7 @@ class BSCKanal(Kanal):
                 if bit == 1:
                     nowy_bajt |= (1 << i)
 
-        dane_wyjsciowe.append(nowy_bajt)
+            dane_wyjsciowe.append(nowy_bajt)
         return bytes(dane_wyjsciowe)
 
 
