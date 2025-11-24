@@ -4,16 +4,14 @@ class KoderCRC16:
 
     @staticmethod
     def oblicz(dane: bytes) -> int:
-        #suma kontrolona
         crc = KoderCRC16._init_val
-
         for bajt in dane:
             crc ^= (bajt << 8)
             for _ in range(8):
                 if crc & 0x8000:
                     crc = (crc << 1) ^ KoderCRC16._wielomian
                 else:
-                    crc = crc << 1
+                    crc <<= 1
                 crc &= 0xFFFF
         return crc
 

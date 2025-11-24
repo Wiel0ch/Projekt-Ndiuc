@@ -1,46 +1,44 @@
-import struct
-
 from KoderCRC16 import KoderCRC16
 
-# Definicja nagłówka: 1 bajt (SEQ) + 2 bajty (CRC)
-NAGLOWEK_FORMAT = '!BH'  # ! - siec, B - unsigned char (1), H - unsigned short (2)
-ROZMIAR_NAGLOWKA = struct.calcsize(NAGLOWEK_FORMAT)
-
-
 class Ramka:
-    def __init__(self, seq_num: int, dane: bytes, crc: int = None):
-        self.seq_num = seq_num & 0xFF
-        self.dane = dane
+    """
+    Struktura ramki:
+    [ADDR_SRC (1)] [ADDR_DST (1)] [SEQ (1)] [LEN (1)] [DANE (...)] [CRC16 (2)]
+    """
 
-        if crc is None:
-            #CRC dla nowej ramki
-            self.crc = KoderCRC16.oblicz(self.dane)
-        else:
-            # Użyj podanego CRC (rozpakowanie)
-            self.crc = crc
+    def __init__(self, addr_src: int, addr_dst: int, seq_num: int, dane: bytes):
+        self.addr_src = addr_src & 0xFF
+        self.addr_dst = addr_dst & 0xFF
+        self.seq = seq_num & 0xFF
+        self.dane = dane
+        self.len = len(dane)
+        self.crc = KoderCRC16.oblicz(self.dane)
 
     def pakuj(self) -> bytes:
-        naglowek = struct.pack(NAGLOWEK_FORMAT, self.seq_num, self.crc)
-        return naglowek + self.dane
+        ramka = bytearray()
+        ramka.append(self.addr_src)
+        ramka.append(self.addr_dst)
+        ramka.append(self.seq)
+        ramka.append(self.len)
+        ramka.extend(self.dane)
+        ramka.extend(self.crc.to_bytes(2, byteorder="big"))
+        return bytes(ramka)
 
     @staticmethod
     def rozpakuj(ramka_bajty: bytes):
-        if len(ramka_bajty) < ROZMIAR_NAGLOWKA:
-            raise ValueError("Ramka zbyt krótka (uszkodzony nagłówek).")
+        addr_src = ramka_bajty[0]
+        addr_dst = ramka_bajty[1]
+        seq = ramka_bajty[2]
+        length = ramka_bajty[3]
+        dane = ramka_bajty[4:4+length]
+        crc_odebrane = int.from_bytes(ramka_bajty[4+length:4+length+2], "big")
 
-        naglowek_bajty = ramka_bajty[:ROZMIAR_NAGLOWKA]
-        dane_bajty = ramka_bajty[ROZMIAR_NAGLOWKA:]
-
-        seq_num, crc = struct.unpack(NAGLOWEK_FORMAT, naglowek_bajty)
-
-        return Ramka(seq_num=seq_num, dane=dane_bajty, crc=crc)
+        r = Ramka(addr_src, addr_dst, seq, dane)
+        r.crc = crc_odebrane
+        return r
 
     def czy_poprawna(self) -> bool:
-        return KoderCRC16.weryfikuj(self.dane, self.crc)
+        return self.crc == KoderCRC16.oblicz(self.dane)
 
-    # debugowanie
-    def __repr__(self):
-        dane_str = self.dane.decode('utf-8', errors='ignore')
-        if len(dane_str) > 20:
-            dane_str = dane_str[:20] + "..."
-        return f"Ramka(SEQ={self.seq_num}, CRC=0x{self.crc:04X}, OK={self.czy_poprawna()}, Dane='{dane_str}')"
+    def __str__(self):
+        return f"ADDR_SRC={self.addr_src} ADDR_DST={self.addr_dst} SEQ={self.seq} LEN={self.len} CRC={hex(self.crc)} DANE={self.dane}"

@@ -1,34 +1,39 @@
 from Nadajnik import Nadajnik
 from Odbiornik import Odbiornik
-from Kanal import BSCKanal, GilbertElliottKanal
+from Kanal import BSCKanal
 
-nadajnik = Nadajnik()
-odbiornik = Odbiornik()
+# Lista plików do wysłania
+pliki_do_wyslania = ["wejscie.txt", "wejscie2.txt", "wejscie3.txt"]
 
-#Użycie kanału BSC
-print("--- TEST KANAŁU BSC ---")
-kanal_bsc = BSCKanal(p_error=0.002)
-dane = b"Test kanalu BSC, czy wszystko dziala poprawnie?"
-wyslane = nadajnik.wyslij(kanal_bsc, dane)
-odebrane = odbiornik.odbierz(wyslane)
-print("-" * 20 + "\n")
+# Inicjalizacja nadajnika, odbiornika i kanału
+nadajnik = Nadajnik(addr_src=1, addr_dst=2)
+odbiornik = Odbiornik(adres=2)
+kanal = BSCKanal(p_error=0.001)  # 2% prawdopodobieństwo błędu
 
+print("\ntransmisja wielu plikow \n")
 
-#Użycie kanału Gilberta-Elliotta
-print("TEST KANAŁU GILBERTA-ELLIOTTA")
+for idx, plik in enumerate(pliki_do_wyslania, start=1):
+    print(f"Transmisja pliku {idx}: {plik}")
 
-kanal_ge = GilbertElliottKanal(
-    p_G=0.0001,   # Prawie idealnie w stanie G
-    p_B=0.1,      # 10% błędów w stanie B
-    p_GB=0.005,   # Średnio po 1/0.005 = 200 bitach przejście do B
-    p_BG=0.1      # Średnio po 1/0.1 = 10 bitach powrót do G
-)
-daneGE = b"aa."
+    # Wczytanie pliku
+    try:
+        with open(plik, "rb") as f:
+            dane = f.read()
+    except FileNotFoundError:
+        print(f" Plik {plik} nie znaleziony! Pomijam...")
+        continue
 
-print("\n--- Transmisja 1 ---")
-wyslane1 = nadajnik.wyslij(kanal_ge, daneGE)
-odebrane1 = odbiornik.odbierz(wyslane1)
+    # Wysyłanie ramki
+    ramka_po_kanale = nadajnik.wyslij(kanal, dane)
 
-print("\n--- Transmisja 2 ---")
-wyslane2 = nadajnik.wyslij(kanal_ge, daneGE)
-odebrane2 = odbiornik.odbierz(wyslane2)
+    # Odbiór ramki
+    odebrane = odbiornik.odbierz(ramka_po_kanale)
+
+    # Zapis do pliku wynikowego jeśli wszystko OK
+    if odebrane:
+        plik_wyj = "odb_" + plik
+        with open(plik_wyj, "wb") as f:
+            f.write(odebrane)
+        print(f" Zapisano do: {plik_wyj}\n")
+    else:
+        print("️ Nic nie zapisano\n")
