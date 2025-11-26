@@ -9,12 +9,12 @@ class Odbiornik:
         print(f"[ODBIORNIK] Odebrano: {ramka}")
 
         if ramka.addr_dst != self.adres:
-            print("❌ Ramka nie dla mnie!")
+            print("Ramka nie dla mnie!")
             return None
 
         if ramka.czy_poprawna():
-            print("✅ CRC poprawne → dane OK")
+            print(" CRC poprawne → dane OK")
             return ramka.dane
         else:
-            print("❌ BŁĄD CRC! Dane uszkodzone!")
+            print(" BŁĄD CRC! Dane uszkodzone!")
             return None
