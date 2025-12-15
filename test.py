@@ -2,38 +2,55 @@ from Nadajnik import Nadajnik
 from Odbiornik import Odbiornik
 from Kanal import BSCKanal
 
-# Lista plików do wysłania
-pliki_do_wyslania = ["wejscie.txt", "wejscie2.txt", "wejscie3.txt"]
 
-# Inicjalizacja nadajnika, odbiornika i kanału
-nadajnik = Nadajnik(addr_src=1, addr_dst=2)
-odbiornik = Odbiornik(adres=2)
-kanal = BSCKanal(p_error=0.001)  # 2% prawdopodobieństwo błędu
+def run_test():
+    print("=================================================")
+    print("   SYMULACJA ARQ STOP-AND-WAIT")
+    print("=================================================\n")
 
-print("\ntransmisja wielu plikow \n")
+    # --- KONFIGURACJA ---
+    NAZWA_PLIKU_WEJ = "test_data.txt"
+    MTU = 20  # Małe ramki -> dużo wysłanych paczek
 
-for idx, plik in enumerate(pliki_do_wyslania, start=1):
-    print(f"Transmisja pliku {idx}: {plik}")
+    # Realistyczne parametry (aby widzieć ~3-5% błędów)
+    P_BLAD_DANYCH = 0.0001  # 1 błąd na 10,000 bitów
+    P_BLAD_ACK = 0.0001
 
-    # Wczytanie pliku
-    try:
-        with open(plik, "rb") as f:
-            dane = f.read()
-    except FileNotFoundError:
-        print(f" Plik {plik} nie znaleziony! Pomijam...")
-        continue
+    # Generowanie dużej ilości danych (ok. 5KB) aby statystyka była rzetelna
+    tresc_do_wyslania = b"A" * 5000 + b"END"
 
-    # Wysyłanie ramki
-    ramka_po_kanale = nadajnik.wyslij(kanal, dane)
+    with open(NAZWA_PLIKU_WEJ, "wb") as f:
+        f.write(tresc_do_wyslania)
 
-    # Odbiór ramki
-    odebrane = odbiornik.odbierz(ramka_po_kanale)
+    # --- INICJALIZACJA ---
+    kanal_tam = BSCKanal(p_error=P_BLAD_DANYCH)
+    kanal_powrot = BSCKanal(p_error=P_BLAD_ACK)
 
-    # Zapis do pliku wynikowego jeśli wszystko OK
-    if odebrane:
-        plik_wyj = "odb_" + plik
-        with open(plik_wyj, "wb") as f:
-            f.write(odebrane)
-        print(f" Zapisano do: {plik_wyj}\n")
+    nadajnik = Nadajnik(moj_adres=10, adres_celu=20, mtu=MTU)
+    odbiornik = Odbiornik(moj_adres=20, adres_nadajnika=10)
+
+    # --- START ---
+    nadajnik.wyslij_plik(kanal_tam, kanal_powrot, tresc_do_wyslania, odbiornik)
+
+    # --- WYNIKI ---
+    odebrane_dane = odbiornik.pobierz_dane()
+
+    total = nadajnik.total_transmissions
+    retry = nadajnik.retransmissions
+    loss_rate = (retry / total * 100) if total > 0 else 0
+
+    print("\n=== RAPORT ===")
+    print(f"Dane wysłane: {len(tresc_do_wyslania)} B")
+    print(f"Dane odebrane: {len(odebrane_dane)} B")
+    print(f"Liczba prób:   {total}")
+    print(f"Retransmisje:  {retry}")
+    print(f"Stopa błędów:  {loss_rate:.2f}%")
+
+    if tresc_do_wyslania == odebrane_dane:
+        print("\n✅ WYNIK: POZYTYWNY (Sukces!)")
     else:
-        print("️ Nic nie zapisano\n")
+        print("\n❌ WYNIK: NEGATYWNY (Błąd danych)")
+
+
+if __name__ == "__main__":
+    run_test()
