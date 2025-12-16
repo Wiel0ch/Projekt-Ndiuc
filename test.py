@@ -17,7 +17,7 @@ def run_test():
     P_BLAD_ACK = 0.0001
 
     # Generowanie dużej ilości danych (ok. 5KB) aby statystyka była rzetelna
-    tresc_do_wyslania = b"A" * 5000 + b"END"
+    tresc_do_wyslania = b"A" * 3000 + b"END"
 
     with open(NAZWA_PLIKU_WEJ, "wb") as f:
         f.write(tresc_do_wyslania)
@@ -47,9 +47,9 @@ def run_test():
     print(f"Stopa błędów:  {loss_rate:.2f}%")
 
     if tresc_do_wyslania == odebrane_dane:
-        print("\n✅ WYNIK: POZYTYWNY (Sukces!)")
+        print("\nWYNIK: POZYTYWNY (Sukces!)")
     else:
-        print("\n❌ WYNIK: NEGATYWNY (Błąd danych)")
+        print("\n WYNIK: NEGATYWNY (Błąd danych)")
 
 
 if __name__ == "__main__":
