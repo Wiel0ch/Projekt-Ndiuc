@@ -1,19 +1,27 @@
 import struct
 from KoderCRC16 import KoderCRC16
+from KoderCRC8 import KoderCRC8
 
 
 class Ramka:
-    # Stałe definicje
-    FLAG_BYTE = 0x7E  # Flaga początku/końca
-    ESCAPE_BYTE = 0x7D  # Znak ucieczki
-    XOR_KEY = 0x20  # Klucz do XORowania przy escapingu
+    # Stałe fizyczne
+    FLAG_BYTE = 0x7E
+    ESCAPE_BYTE = 0x7D
+    XOR_KEY = 0x20
 
     # Typy ramek
     TYPE_DATA = 0x00
     TYPE_ACK = 0x01
     TYPE_NAK = 0x02
 
-    def __init__(self, addr_src: int, addr_dst: int, seq_num: int, dane: bytes = b'', msg_type=TYPE_DATA, is_eof=False):
+    # Typy CRC
+    CRC8 = 8
+    CRC16 = 16
+
+    def __init__(self, addr_src, addr_dst, seq_num,
+                 dane=b'', msg_type=TYPE_DATA, is_eof=False,
+                 crc_type=CRC16):
+
         self.addr_src = addr_src & 0xFF
         self.addr_dst = addr_dst & 0xFF
         self.seq = seq_num & 0xFF
@@ -21,58 +29,60 @@ class Ramka:
         self.msg_type = msg_type
         self.is_eof = is_eof
         self.len = len(dane)
+
+        self.crc_type = crc_type
         self.crc = 0
         self._calculated_crc = 0
 
     def pakuj(self) -> bytes:
-        """Tworzy ramkę fizyczną z nagłówkiem, CRC i flagami."""
-        # 1. Nagłówek: DST(1B), SRC(1B), CTRL(1B), SEQ(1B), LEN(2B)
-        # Bit 5 w CTRL to flaga EOF
+        # Nagłówek
         ctrl_byte = (self.msg_type << 6) | (int(self.is_eof) << 5)
-        header = struct.pack('!BBBBH', self.addr_dst, self.addr_src, ctrl_byte, self.seq, self.len)
+        header = struct.pack('!BBBBH',
+                              self.addr_dst,
+                              self.addr_src,
+                              ctrl_byte,
+                              self.seq,
+                              self.len)
 
-        # 2. Payload do CRC (Nagłówek + Dane)
         raw_payload = header + self.dane
 
-        # 3. Obliczenie i doklejenie CRC
-        self.crc = KoderCRC16.oblicz(raw_payload)
-        crc_bytes = self.crc.to_bytes(2, byteorder='big')
+        # CRC
+        if self.crc_type == Ramka.CRC8:
+            self.crc = KoderCRC8.oblicz(raw_payload)
+            crc_bytes = self.crc.to_bytes(1, 'big')
+        else:
+            self.crc = KoderCRC16.oblicz(raw_payload)
+            crc_bytes = self.crc.to_bytes(2, 'big')
+
         frame_content = raw_payload + crc_bytes
+        stuffed = self._byte_stuffing(frame_content)
 
-        # 4. Byte Stuffing (Escape'owanie flag w środku)
-        stuffed_content = self._byte_stuffing(frame_content)
-
-        # 5. Dodanie flag na początku i końcu
-        return bytes([self.FLAG_BYTE]) + stuffed_content + bytes([self.FLAG_BYTE])
+        return bytes([self.FLAG_BYTE]) + stuffed + bytes([self.FLAG_BYTE])
 
     @staticmethod
     def rozpakuj(ramka_bajty: bytes):
-        """Odtwarza obiekt Ramka z ciągu bajtów."""
         if len(ramka_bajty) < 2:
             return None
 
-            # 1. Usunięcie flag
-        temp_bytes = ramka_bajty
-        if temp_bytes[0] == Ramka.FLAG_BYTE:
-            temp_bytes = temp_bytes[1:]
-        if len(temp_bytes) > 0 and temp_bytes[-1] == Ramka.FLAG_BYTE:
-            temp_bytes = temp_bytes[:-1]
+        temp = ramka_bajty
+        if temp[0] == Ramka.FLAG_BYTE:
+            temp = temp[1:]
+        if temp and temp[-1] == Ramka.FLAG_BYTE:
+            temp = temp[:-1]
 
-        # 2. Byte Unstuffing
         try:
-            raw_content = Ramka._byte_unstuffing(temp_bytes)
+            raw = Ramka._byte_unstuffing(temp)
         except ValueError:
             return None
 
-            # Min. rozmiar: 6B nagłówka + 2B CRC = 8B
-        if len(raw_content) < 8:
+        # Zakładamy CRC16 (kompatybilność wstecz)
+        if len(raw) < 8:
             return None
 
-        # 3. Wyodrębnienie CRC (ostatnie 2 bajty)
-        received_crc = int.from_bytes(raw_content[-2:], byteorder='big')
-        data_to_check = raw_content[:-2]
+        crc_len = 2
+        received_crc = int.from_bytes(raw[-crc_len:], 'big')
+        data_to_check = raw[:-crc_len]
 
-        # 4. Parsowanie nagłówka
         header = data_to_check[:6]
         payload = data_to_check[6:]
 
@@ -84,8 +94,7 @@ class Ramka:
         msg_type = (ctrl >> 6) & 0x03
         is_eof = bool((ctrl >> 5) & 0x01)
 
-        # 5. Tworzenie obiektu
-        r = Ramka(src, dst, seq, payload, msg_type, is_eof)
+        r = Ramka(src, dst, seq, payload, msg_type, is_eof, crc_type=Ramka.CRC16)
         r.crc = received_crc
         r._calculated_crc = KoderCRC16.oblicz(data_to_check)
 
@@ -98,7 +107,7 @@ class Ramka:
     def _byte_stuffing(data: bytes) -> bytes:
         res = bytearray()
         for b in data:
-            if b == Ramka.FLAG_BYTE or b == Ramka.ESCAPE_BYTE:
+            if b in (Ramka.FLAG_BYTE, Ramka.ESCAPE_BYTE):
                 res.append(Ramka.ESCAPE_BYTE)
                 res.append(b ^ Ramka.XOR_KEY)
             else:
@@ -108,17 +117,16 @@ class Ramka:
     @staticmethod
     def _byte_unstuffing(data: bytes) -> bytes:
         res = bytearray()
-        skip_next = False
+        skip = False
         for i in range(len(data)):
-            if skip_next:
-                skip_next = False
+            if skip:
+                skip = False
                 continue
-            b = data[i]
-            if b == Ramka.ESCAPE_BYTE:
+            if data[i] == Ramka.ESCAPE_BYTE:
                 if i + 1 >= len(data):
-                    raise ValueError("Escape na końcu")
+                    raise ValueError("Błędne escape")
                 res.append(data[i + 1] ^ Ramka.XOR_KEY)
-                skip_next = True
+                skip = True
             else:
-                res.append(b)
+                res.append(data[i])
         return bytes(res)

@@ -115,7 +115,7 @@ def limit_retransmisji():
 
         print(f"Limit {n} -> {procent:.2f}%")
 
-        if procent >= 99:
+        if procent >= 99.5:
             print(f"\n REKOMENDOWANY LIMIT = {n}")
             break
 
