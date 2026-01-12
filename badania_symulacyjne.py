@@ -6,7 +6,7 @@ from Odbiornik import Odbiornik
 from Kanal import BSCKanal
 
 # PARAMETRY
-MTU = 50
+MTU = 54
 ROZMIAR_PLIKU = 5000
 DANE = b"A" * ROZMIAR_PLIKU
 
@@ -39,7 +39,7 @@ def jedna_symulacja(p_error):
     return procent_retransmisji, nadajnik.attempts_history
 
 
-# BADANIE 1: BER → ŚREDNIA RETRANSMISJI
+# BER ŚREDNIA RETRANSMISJI
 def badanie_ber():
     p_errors = [1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3, 2e-3, 5e-3, 1e-2]
 
@@ -70,9 +70,8 @@ def badanie_ber():
     plt.show()
 
 
-# ==========================================
-# BADANIE 2: HISTOGRAM LICZBY PRÓB
-# ==========================================
+
+#HISTOGRAM LICZBY PRÓB
 def histogram():
     BER_TEST = 0.002
     wszystkie_proby = []
@@ -93,11 +92,7 @@ def histogram():
     plt.grid(True)
     plt.savefig("histogram.png")
     plt.show()
-
-
-# ==========================================
-# BADANIE 3: WYZNACZENIE LIMITU RETRANSMISJI
-# ==========================================
+#WYZNACZENIE LIMITU RETRANSMISJI
 def limit_retransmisji():
     BER_TEST = 0.002
     wszystkie = []
