@@ -61,10 +61,11 @@ class Ramka:
 
     @staticmethod
     def rozpakuj(ramka_bajty: bytes):
-        if len(ramka_bajty) < 2:
+        if len(ramka_bajty) < 7:  # Minimum: 6 nagłówka + 1 CRC
             return None
 
         temp = ramka_bajty
+        # Usuwanie flag (byte unstuffing robi to w środku, ale tu usuwamy skrajne)
         if temp[0] == Ramka.FLAG_BYTE:
             temp = temp[1:]
         if temp and temp[-1] == Ramka.FLAG_BYTE:
@@ -75,31 +76,50 @@ class Ramka:
         except ValueError:
             return None
 
-        # Zakładamy CRC16 (kompatybilność wstecz)
-        if len(raw) < 8:
+        if len(raw) < 7:  # Nagłówek(6) + CRC(min 1)
             return None
 
-        crc_len = 2
+        # Odczytujemy nagłówek, żeby poznać długość danych
+        header_part = raw[:6]
+        dst, src, ctrl, seq, declared_len = struct.unpack('!BBBBH', header_part)
+
+        # Sprawdzamy ile bajtów zostało na CRC
+        # Cała ramka (raw) = Nagłówek (6) + Dane (declared_len) + CRC (X)
+        expected_total_len_without_crc = 6 + declared_len
+        crc_len = len(raw) - expected_total_len_without_crc
+
+        # Rozpoznawanie typu CRC po długości reszty
+        if crc_len == 1:
+            detected_crc_type = Ramka.CRC8
+        elif crc_len == 2:
+            detected_crc_type = Ramka.CRC16
+        else:
+            return None  # Błędna długość ramki (nie pasuje ani do CRC8 ani CRC16)
+
+        # Wyodrębnienie CRC i weryfikacja
         received_crc = int.from_bytes(raw[-crc_len:], 'big')
         data_to_check = raw[:-crc_len]
+        payload = data_to_check[6:]  # Dane zaczynają się po 6 bajcie nagłówka
 
-        header = data_to_check[:6]
-        payload = data_to_check[6:]
-
-        dst, src, ctrl, seq, length = struct.unpack('!BBBBH', header)
-
-        if len(payload) != length:
+        # Wstępna weryfikacja długości payloadu
+        if len(payload) != declared_len:
             return None
 
+        # Parsowanie pól sterujących
         msg_type = (ctrl >> 6) & 0x03
         is_eof = bool((ctrl >> 5) & 0x01)
 
-        r = Ramka(src, dst, seq, payload, msg_type, is_eof, crc_type=Ramka.CRC16)
+        # Tworzymy obiekt ramki
+        r = Ramka(src, dst, seq, payload, msg_type, is_eof, crc_type=detected_crc_type)
         r.crc = received_crc
-        r._calculated_crc = KoderCRC16.oblicz(data_to_check)
+
+        # Obliczamy CRC właściwym algorytmem
+        if detected_crc_type == Ramka.CRC8:
+            r._calculated_crc = KoderCRC8.oblicz(data_to_check)
+        else:
+            r._calculated_crc = KoderCRC16.oblicz(data_to_check)
 
         return r
-
     def czy_poprawna(self) -> bool:
         return self.crc == self._calculated_crc
 
